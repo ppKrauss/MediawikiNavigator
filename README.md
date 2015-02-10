@@ -23,11 +23,11 @@ $mn->base_url = 'http://www.myWiki.org/caWiki';
 $mn->login('myuser', 'passwd'); 
 var_dump($mn->cookies);
 
-pag1 = $mn->get('?action=render&title=My_wiki_page1');
+$pag1 = $mn->get('?action=render&title=My_wiki_page1');
 $status = $mn->post($data,'?action=edit&title=My_wiki_page1');
 
-pag2 = $mn->get('/My_wiki_page2');
-pag3 = $mn->get('/api.php?query&format=xml&prop=categories&titles=My_wiki_page1');
+$pag2 = $mn->get('/My_wiki_page2');
+$pag3 = $mn->get('/api.php?query&format=xml&prop=categories&titles=My_wiki_page1');
 ...
 ```
 ## Methods and public variables ##
