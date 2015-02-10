@@ -1,7 +1,7 @@
 # MediawikiNavigator
 Simple and manutenable POST/GET access with Cookies, oriented to [file_get_contents()](http://php.net/manual/en/function.file-get-contents.php).
 
-Minimized and easy to use, do Mediawiki 1.16+ authentication, store the login cookies, and manage POST and GET access. Use the [Mediawiki API for login](http://www.mediawiki.org/wiki/API:Login).
+Minimized and easy to use: do [Mediawiki 1.16+ authentication](http://www.mediawiki.org/wiki/API:Login) (using API), store the login cookies, and manage POST and GET access.
 
 ## Usage ##
 
@@ -22,7 +22,10 @@ $mn = new MediawikiNavigor();
 $mn->base_url = 'http://www.myWiki.org/caWiki';
 $mn->login('myuser', 'passwd'); 
 var_dump($mn->cookies);
+
 pag1 = $mn->get('?action=render&title=My_wiki_page1');
+$status = $mn->post($data,'?action=edit&title=My_wiki_page1');
+
 pag2 = $mn->get('/My_wiki_page2');
 pag3 = $mn->get('/api.php?query&format=xml&prop=categories&titles=My_wiki_page1');
 ...
