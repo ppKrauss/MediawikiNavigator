@@ -29,6 +29,10 @@ $status = $mn->post($data,'?action=edit&title=My_wiki_page1');
 $pag2 = $mn->get('/My_wiki_page2');
 $pag3 = $mn->get('/api.php?query&format=xml&prop=categories&titles=My_wiki_page1');
 ...
+// Works with HTTPS,
+$mn2 = new MediawikiNavigor('https://en.wikipedia.org/wiki');
+$pag4 = $mn2->get('/Commerce');
+...
 ```
 ## Methods and public variables ##
 
