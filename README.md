@@ -44,3 +44,5 @@ For "closed Wiki" and for special uses with API and/or another URLs, you need au
 For GET and POST use relative URL (about `base_url`).
 For simple GET use `$content = $wbuff->get($relatUrl)`.
 The POST method need some `$data`,  `$content = $wbuff->post($data,$relatUrl)`.
+
+
