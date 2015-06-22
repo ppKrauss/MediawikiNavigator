@@ -13,9 +13,11 @@
  *  $wikipage = $wbuff->get('/Test_page'); // or '/index.php?action=render&title=Test_page';
  */
 class MediawikiNavigor {
-	var $base_url = ''; // default wiki or empty
-	var $options = NULL; // refresh with options() method
-	var $cookies = NULL; // refresh with login() method
+	var $base_url    = ''; 		// default wiki or empty. parse_url()~"$scheme://$host/$path?$query..."
+	var $httpOptions = NULL; 	// refresh with httpOptions() method
+	var $cookies     = NULL; 	// refresh with login() method
+	var $pageInUse   = '';		// title or pageid, cache from last call.
+	var $pageInUse_idtype = 'title';
 
 	/**
 	 * Constructor.
@@ -64,18 +66,15 @@ class MediawikiNavigor {
 		}
 	} // func
 
-	function options($data=NULL){
-		if ( ($cookies = $this->cookies) !== NULL ) {
-			$cookies = join('; ', array_map(
-				function($key) use ($cookies) { return "$key={$cookies[$key]}"; },
-				array_keys($cookies)
-			));
+	function httpOptions($data=NULL){
+		if ( $this->cookies !== NULL ) {
+			$cookies = $this->assoc_join($this->cookies,'; ');
 			$cookies = "Cookie: $cookies\r\n";
-		}
-		$this->options = $data?
+		} else $cookies='';
+		$this->httpOptions = $data?
 			array(
 			    'http' => array(
-				'header'  => "Content-type: application/x-www-form-urlencoded\r\n".((string) $cookies),
+				'header'  => "Content-type: application/x-www-form-urlencoded\r\n$cookies",
 				'method'  => 'POST',
 				'content' => http_build_query($data),
 			))
@@ -86,14 +85,19 @@ class MediawikiNavigor {
 	 * Execute file_get_contents() with POST method in the base_url. Use $this->cookies.
 	 * @param $data array or NULL.
 	 * @param $relat_url string (optional) URL relative for base_url.
-	 * @param $refreshOptions boolean (default=true) for refresh the options.
+	 * @param $refreshHttpOptions boolean (default=true) for refresh the httpOptions.
 	 * @return string with contents, or FALSE on failure.
 	 */
-	function post($data,$relat_url='',$refreshOptions=true) {
+	function post($data,$relat_url='',$refreshHttpOptions=true, $debug=false) {
 		$url = $this->base_url.$relat_url;
-		if ($refreshOptions) $this->options($data); // $data can be NULL
-		return is_array($this->options)? 
-			file_get_contents($url, false, stream_context_create($this->options) ): // GET or POST
+
+		if ($refreshHttpOptions) $this->httpOptions($data); // $data can be NULL
+		if ($debug) { // for terminal use
+			print "\n----\n---- DEBEUG_post $url\n";
+			var_dump($this->httpOptions);
+		}
+		return is_array($this->httpOptions)? 
+			file_get_contents($url, false, stream_context_create($this->httpOptions) ): // GET or POST
 			file_get_contents($url); // GET
 	}
 
@@ -103,8 +107,8 @@ class MediawikiNavigor {
 	 * @param $relat_url string (optional) URL relative for base_url.
 	 * @return string with contents, or FALSE on failure.
 	 */
-	function get($relat_url='',$refreshOptions=true) {
-		return $this->post(NULL,$relat_url,$refreshOptions);
+	function get($relat_url='',$refreshHttpOptions=true) {
+		return $this->post(NULL,$relat_url,$refreshHttpOptions);
 	}
 
 
