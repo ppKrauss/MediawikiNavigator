@@ -18,6 +18,8 @@ class MediawikiNavigor {
 	var $cookies     = NULL; 	// refresh with login() method
 	var $pageInUse   = '';		// title or pageid, cache from last call.
 	var $pageInUse_idtype = 'title';
+	var $wikitext = NULL;		// when get wikitext 
+	var $wikitext_tpls = NULL;
 
 	/**
 	 * Constructor.
@@ -113,19 +115,88 @@ class MediawikiNavigor {
 
 
 
-	// // // // // // // // // // // // // //
-	// // (less important) BEGIN:UTIL_METHODS
+	/**
+	 * Tokenizes wikitex-templates. The template-parameters must be regular.
+	 * To complex paramters, use https://www.mediawiki.org/wiki/Manual:Preprocessor.php
+	 * @param $splitParams booleam to split content into params.
+	 */
+	function wikitextTpl_tokenize($splitParams=TRUE) {
+		$n=0;
+		$tpls = array();
+		$this->wikitext = preg_replace_callback(
+			'~\{\{([a-z][\w\d_\-]+)(.+?)\}\}~uis',  // templates wikitext
+			function ($m) use (&$n,&$tpls,$splitParams) {
+				$name = $m[1];
+				$content = $m[2];
+				if ($splitParams) {
+					$params=array(); //'#name'=>$name
+					$np = 0;
+					$content = str_replace("\t",' ',$content); // remove tabs 
+					foreach( explode('|',$content) as $p) {
+						$p = trim($p);
+						if ($p) {
+							if (preg_match('/^([a-z][_\w\-\d]+)\s*=\s*(.+)$/is',$p,$mm))
+								$params[$mm[1]]=$mm[2];
+							else {
+								$np++;
+								$params["#$np"]=$p; // #1, #2, ...
+							}
+						} // if p
+					} // for
+					$tpls[$n] = $params;
+				} else 
+					$tpls[$n] = $content;
+				$ret = "#_tpl_#$name#$n##";
+				$n++;
+				return $ret;
+			},
+			$this->wikitext
+		);
+		$this->wikitext_tpls = $tpls;
+	} // func
 
 	/**
-REVISAR: gerenciar array e compor saídas, conferir com outras libs e usar $this->assoc_join($a,'&')
+	 * Undo tokens of wikitex-templates. Normalize parametric templates.
+	 * @param $sortParams booleam to sort template-parameters.
+	 */
+	function wikitextTpl_untokenize($sortParams=TRUE) {
+		$tpls = &$this->wikitext_tpls;
+		$this->wikitext = preg_replace_callback(
+			'~#_tpl_#([a-z][\w\d_\-]+)#(\d+)##~is',  // templates wikitext
+			function ($m) use (&$tpls,$sortParams) {
+				$start = '{{'.$m[1];
+				$n = $m[2];
+				if (isset($tpls[$n])) {
+					if (is_array($tpls[$n])) { // normalized template
+						$knames = array();
+						foreach(array_keys($tpls[$n]) as $k) if (substr($k,0,1)!='#') 
+								$knames[]=$k;
+							else
+								$start.="|".$tpls[$n][$k];
+						if ($sortParams) sort($knames);
+						foreach($knames as $k)
+							$start.="\n|$k=".$tpls[$n][$k];
+						return "$start\n}}";
+					} else 
+						return "$start$tpls[$n]\n}}";
+				} else
+					return '';
+			},
+			$this->wikitext
+		);
+	} // func
 
+	// // // // // // // // //
+	// // BEGIN:UTIL_METHODS
 
+	/**
 	 * Wrap method for Mediawiki's api.php and index.php, with one title at a time.
 	 * @param $cmd string local convention about commands.
 	 * @param $title string article's title.
 	 * @param $format string to be returned (xml, html, json, php, wikitext).
 	 * @return string with contents, or FALSE on failure.
 	 */
+	//REVISAR: gerenciar array e compor saídas, conferir com outras libs e usar $this->assoc_join($a,'&')
 	function getByTitle($cmd,$title='',$format='') {
 		$article = $this->pageInUse_check($title);
 			// falta api.php?format=xml&action=query&prop=extracts&titles=
@@ -145,7 +216,7 @@ REVISAR: gerenciar array e compor saídas, conferir com outras libs e usar $this
 
 		} else switch ($cmd) {
 		case 'raw': // wikitext, see http://www.mediawiki.org/wiki/Manual:Parameters_to_index.php#Raw
-			$ret = $this->get("/index.php?action=raw&$article");
+			$ret = $this->wikitext = $this->get("/index.php?action=raw&$article");
 			break;
 		// raw-expanded de api.php?action=expandtemplates ... ver http://www.mediawiki.org/wiki/API:Parsing_wikitext
 		case 'pageCategs':
@@ -221,7 +292,6 @@ REVISAR: gerenciar array e compor saídas, conferir com outras libs e usar $this
 		$data = array( 'summary'=>$summary, 'text'=>$newWikiText, 'token'=>$token );
 		$r = unserialize( $this->post($data,"/api.php?action=edit&format=php&$article") );
 		return isset($r['edit']['result'])? ($r['edit']['result']=='Success'): -1;
-		//<edit new="" result="Success" pageid="166" title="..." contentmodel="wikitext" oldrevid="0" newrevid="403" newtimestamp="2015-02-17T21:50:54Z" />
 	}
 
 	function pageInUse_check($title,$title_sufix='') {
@@ -305,5 +375,9 @@ REVISAR: gerenciar array e compor saídas, conferir com outras libs e usar $this
 	// // // // // // // // // // // // //
 
 } // class
+
+
+
+
 
 ?>
