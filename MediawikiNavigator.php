@@ -18,8 +18,10 @@ class MediawikiNavigor {
 	var $cookies     = NULL; 	// refresh with login() method
 	var $pageInUse   = '';		// title or pageid, cache from last call.
 	var $pageInUse_idtype = 'title';
+
 	var $wikitext = NULL;		// when get wikitext 
 	var $wikitext_tpls = NULL;
+	var $wikitext_normalizeConfig = NULL;
 
 	/**
 	 * Constructor.
@@ -30,6 +32,19 @@ class MediawikiNavigor {
 	 */
 	function __construct($base_url='',$lgname='',$lgpassword='') {
 		$ok = true;
+		$this->wikitext_normalizeConfig = array(
+			'#spaces1'=>function ($k,$v) { 
+				// remove tabs and extra-spaces, preserving internal \n's
+				return trim(preg_replace('/[ \t]+/s',' ',$v));
+			},
+			'CACHE'=>array(
+				'kx_example'=> function ($params) { 
+					return '123_'.count($params);
+				}
+			),
+			'example'=>FALSE,
+		);
+
 		if ($base_url) $this->base_url=$base_url;
 		if ($lgname)
 			$ok = $this->login($lgname,$lgpassword);
@@ -114,7 +129,6 @@ class MediawikiNavigor {
 	}
 
 
-
 	/**
 	 * Tokenizes wikitex-templates. The template-parameters must be regular.
 	 * To complex paramters, use https://www.mediawiki.org/wiki/Manual:Preprocessor.php
@@ -129,7 +143,7 @@ class MediawikiNavigor {
 				$name = $m[1];
 				$content = $m[2];
 				if ($splitParams) {
-					$params=array(); //'#name'=>$name
+					$params=array('#name'=>$name);
 					$np = 0;
 					$content = str_replace("\t",' ',$content); // remove tabs 
 					foreach( explode('|',$content) as $p) {
@@ -159,21 +173,22 @@ class MediawikiNavigor {
 	 * Undo tokens of wikitex-templates. Normalize parametric templates.
 	 * @param $sortParams booleam to sort template-parameters.
 	 */
-	function wikitextTpl_untokenize($sortParams=TRUE) {
+	function wikitextTpl_untokenize($sortParams=TRUE,$close=TRUE,$VPARAM_SEP=' | ') {
 		$tpls = &$this->wikitext_tpls;
 		$this->wikitext = preg_replace_callback(
 			'~#_tpl_#([a-z][\w\d_\-]+)#(\d+)##~is',  // templates wikitext
-			function ($m) use (&$tpls,$sortParams) {
+			function ($m) use (&$tpls,$sortParams,$VPARAM_SEP) {
 				$start = '{{'.$m[1];
 				$n = $m[2];
 				if (isset($tpls[$n])) {
 					if (is_array($tpls[$n])) { // normalized template
-						$knames = array();
+						$knames  = array();
+						$vparams = array();
 						foreach(array_keys($tpls[$n]) as $k) if (substr($k,0,1)!='#') 
 								$knames[]=$k;
-							else
-								$start.="|".$tpls[$n][$k];
-						if ($sortParams) sort($knames);
+							elseif ($k!='#name')
+								$vparams[]=$tpls[$n][$k];
+						if (count($vparams))  $start .= '|'.join($VPARAM_SEP,$vparams);
 						foreach($knames as $k)
 							$start.="\n|$k=".$tpls[$n][$k];
 						return "$start\n}}";
@@ -184,7 +199,49 @@ class MediawikiNavigor {
 			},
 			$this->wikitext
 		);
+		if ($close)  $this->wikitext_tpls = NULL; // see 
 	} // func
+
+	/**
+	 * Normalize wikitext_tpls.
+	 * @param $sortParams booleam to sort template-parameters.
+	 */
+	function wikitextTpl_normalize_tpls($splitParams=TRUE) {
+		if ($this->wikitext_tpls === NULL)
+			$this->wikitextTpl_tokenize($splitParams);
+		$confFuncs = array();
+		$cacheFuncs = array();
+		foreach($this->wikitext_normalizeConfig as $name=>$c)
+			if (substr($name,0,1)=='#' && is_callable($c)) $confFuncs[] = $c;
+		$normFunc = function($k,$v) use (&$confFuncs) {
+			foreach($confFuncs as $func) 
+				$v=$func($k,$v);
+			return $v;
+		};
+		for($i=0; $i<count($this->wikitext_tpls); $i++) {
+			$tpl = &$this->wikitext_tpls[$i]; // alias
+			if (is_array($tpl)) {
+				foreach($tpl as $k=>$v)
+					$tpl[$k] = $normFunc($k,$v);
+				foreach($this->wikitext_normalizeConfig['CACHE'] as $kxname=>$kxfn)
+					$tpl[$kxname] = $kxfn($tpl); // add or replace kx_param
+			} else
+				$tpl = $normFunc($tpl);
+		} // for
+		return $i;
+	} // func
+
+	/**
+	 * Normalize parametric templates.
+	 * @param $sortParams booleam to sort template-parameters.
+	 */
+	function wikitextTpl_normalize($splitParams=TRUE,$sortParams=TRUE,$close=TRUE) {
+		if ($this->wikitext!==NULL) {
+			$this->wikitextTpl_normalize_tpls($splitParams,$sortParams);
+			$this->wikitextTpl_untokenize($sortParams,$close);
+		}
+	}
+
 
 	// // // // // // // // //
 	// // BEGIN:UTIL_METHODS
